@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Posture Analyzer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f4f8;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #333;
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .actions input[type="file"] {
+      padding: 10px;
+      background: #e8f0fe;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    .actions button {
+      padding: 10px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .actions button:hover {
+      background-color: #0056b3;
+    }
+
+    #videoPreview {
+      width: 100%;
+      max-height: 300px;
+      margin-top: 15px;
+      display: none;
+    }
+
+    #result {
+      margin-top: 20px;
+    }
+
+    .summary, .feedback {
+      margin-top: 20px;
+    }
+
+    .feedback-item {
+      background: #f8f9fa;
+      padding: 10px;
+      border-left: 5px solid #007bff;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+
+    .webcam-section {
+      margin-top: 20px;
+    }
+
+    video#webcam {
+      width: 100%;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧍‍♂️ Bad Posture Detection App</h1>
+
+    <div class="actions">
+      <input type="file" id="videoInput" accept="video/*">
+      <button onclick="uploadVideo()">📤 Upload & Analyze</button>
+    </div>
+
+    <video id="videoPreview" controls></video>
+
+    <div class="webcam-section">
+      <h3>🎥 Or Record using Webcam</h3>
+      <video id="webcam" autoplay muted></video><br>
+      <button onclick="startRecording()">⏺️ Start Recording</button>
+      <button onclick="stopRecording()">⏹️ Stop & Analyze</button>
+    </div>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    let mediaRecorder;
+    let recordedChunks = [];
+
+    const webcam = document.getElementById("webcam");
+
+    // Start webcam stream
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false }).then(stream => {
+      webcam.srcObject = stream;
+      mediaRecorder = new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = event => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: "video/mp4" });
+        uploadRecordedVideo(blob);
+        recordedChunks = [];
+      };
+    });
+
+    function startRecording() {
+      recordedChunks = [];
+      mediaRecorder.start();
+      alert("Recording started...");
+    }
+
+    function stopRecording() {
+      mediaRecorder.stop();
+      alert("Recording stopped. Uploading...");
+    }
+
+    async function uploadRecordedVideo(blob) {
+      const formData = new FormData();
+      formData.append("file", blob, "recorded_video.mp4");
+
+      document.getElementById("result").innerHTML = "⏳ Analyzing recorded video...";
+      await analyzeVideo(formData);
+    }
+
+    async function uploadVideo() {
+      const fileInput = document.getElementById("videoInput");
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select a video.");
+        return;
+      }
+
+      const videoPreview = document.getElementById("videoPreview");
+      videoPreview.src = URL.createObjectURL(file);
+      videoPreview.style.display = "block";
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      document.getElementById("result").innerHTML = "⏳ Uploading and analyzing...";
+      await analyzeVideo(formData);
+    }
+
+    async function analyzeVideo(formData) {
+      try {
+        const response = await fetch("http://127.0.0.1:54301/analyze", {
+          method: "POST",
+          body: formData
+        });
+        const data = await response.json();
+        showResults(data);
+      } catch (error) {
+        console.error("Error:", error);
+        document.getElementById("result").innerHTML = "❌ Something went wrong.";
+      }
+    }
+
+    function showResults(data) {
+      const container = document.getElementById("result");
+      container.innerHTML = "";
+
+      const summary = document.createElement("div");
+      summary.className = "summary";
+      summary.innerHTML = "<h2>📊 Summary</h2>";
+      if (data.summary.length === 0) {
+        summary.innerHTML += "<p>No posture issues detected ✅</p>";
+      } else {
+        data.summary.forEach(item => {
+          summary.innerHTML += `<p><strong>${item.issue}</strong>: Detected in ${item.count} frames</p>`;
+        });
+      }
+      container.appendChild(summary);
+
+      const feedback = document.createElement("div");
+      feedback.className = "feedback";
+      feedback.innerHTML = "<h2>🧾 Frame-wise Feedback</h2>";
+      if (data.feedback.length === 0) {
+        feedback.innerHTML += "<p>No issues found frame-wise ✅</p>";
+      } else {
+        data.feedback.forEach(fb => {
+          feedback.innerHTML += `
+            <div class="feedback-item">
+              <strong>Frame ${fb.frame}</strong><br>
+              Issues: ${fb.issues.join(", ")}
+            </div>`;
+        });
+      }
+      container.appendChild(feedback);
+    }
+  </script>
+</body>
+</html>
