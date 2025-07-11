@@ -113,6 +113,4 @@ You can add demo images/gifs showing how posture is detected.
 🤝 Contributors
 Haritha – Frontend, Backend, Integration
 
-🔗 Repository Links
-Frontend & Backend Combined Repo
 
